@@ -264,7 +264,7 @@ docker buildx build -f docker/Dockerfile --target artifact --output type=local,d
 Each release has a `.deb` for `amd64` and `arm64` (Debian 13 or newer, Ubuntu 22.04 or newer):
 
 ```bash
-sudo apt install ./meshcom-status_1.0.0-1_amd64.deb
+sudo apt install ./meshcom-status_1.0.1-1_amd64.deb
 ```
 
 | Path                                             | Content                                         |
