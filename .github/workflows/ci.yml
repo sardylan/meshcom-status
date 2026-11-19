@@ -182,7 +182,7 @@ jobs:
           sudo apt-get install -y -qq lintian >/dev/null
           lintian --fail-on error,warning dist/*.deb
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-linux-${{ matrix.arch }}
           path: dist/*
@@ -266,7 +266,7 @@ jobs:
           fi
           rm -r "$name"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-${{ matrix.platform }}
           path: dist/*
@@ -323,7 +323,7 @@ jobs:
           digest="${{ steps.build.outputs.digest }}"
           touch "digests/${digest#sha256:}"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: digest-${{ matrix.arch }}
           path: digests/*
