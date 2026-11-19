@@ -334,7 +334,23 @@ pre-release for `-…` versions. Image tags: `X.Y.Z`; for stable versions also `
 Windows ones are built with the same pinned Rust. The default `meshcom-status.toml` is
 `packaging/meshcom-status.toml`, which a test keeps equal to `--config-dump` with the defaults.
 
+Every release file and the image come with a signed build provenance attestation (GitHub
+artifact attestations, signed through Sigstore, for releases after 1.1.0), which proves that this
+repository's pipeline built them from the tagged commit:
+
+```bash
+gh attestation verify meshcom-status-vX.Y.Z-linux-amd64.tar.gz --repo sardylan/meshcom-status
+```
+
+```bash
+gh attestation verify oci://docker.io/sardylan/meshcom-status:X.Y.Z --repo sardylan/meshcom-status
+```
+
 The repository needs the secrets `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN`.
+
+Dependabot (`.github/dependabot.yml`) opens weekly merge requests for the Cargo, npm and GitHub
+Actions dependencies, with minor and patch updates grouped. The Rust and Node.js versions pinned in
+`docker/Dockerfile` and the workflow are raised by hand, together.
 
 To release, set the new version in `Cargo.toml` (`version = "0.2.0"`) and in the front end, merge
 into `main`, then tag `v0.2.0` there:

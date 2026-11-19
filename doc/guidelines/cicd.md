@@ -138,6 +138,13 @@ Policy and the FHS:
 - The release on the hosting platform (for example a GitHub release) is named after the tag, has
   generated release notes, the archives and packages, and one `SHA256SUMS` file covering them,
   and is marked as a pre-release for pre-release versions.
+- **Provenance**: the pipeline signs a build provenance attestation (SLSA) for every published
+  file and for the multi-architecture image, before publishing them, with keyless signing tied
+  to the pipeline's identity (for example GitHub artifact attestations, signed through Sigstore)
+  rather than a long-lived key kept in the secret store. Image attestations are also pushed to
+  the registry. The README says how to verify them (for example `gh attestation verify`).
+- **Signed tags**: release tags are signed by whoever creates them (`git tag -s`, or
+  `tag.gpgsign`), with a key known to the hosting platform, so the release shows who made it.
 
 ## 6. Pipeline rules
 
@@ -154,6 +161,11 @@ Policy and the FHS:
   from publishers other than the platform and the tool vendors SHOULD be pinned to a commit SHA.
 - **Concurrency**: a newer commit cancels the pipeline of an older one on the same branch or merge
   request; a release run is never cancelled.
+- **Dependency updates** are proposed automatically (for example Dependabot, `.github/dependabot.yml`)
+  as merge requests, weekly, for every package ecosystem of the repository (language packages,
+  pipeline actions); minor and patch updates are grouped per ecosystem, major ones come one by
+  one. They pass the same tests as any merge request. Pinned toolchains that must move together
+  (the container build and the pipeline) are raised by hand, not by the bot.
 - **Caches** (dependencies, build layers) speed up runs but never change results; a run with an
   empty cache produces the same artifacts.
 - Pipelines fail fast and loudly: every check is an error, not a warning, and the failing step

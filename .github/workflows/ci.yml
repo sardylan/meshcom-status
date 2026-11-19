@@ -11,7 +11,9 @@
 #   - Debian packages: amd64, arm64;
 #   - the image sardylan/meshcom-status for linux/amd64 and linux/arm64 (`X.Y.Z`; for stable
 #     versions also `X.Y`, `X` from 1.0.0 on, and `latest`);
-#   - a GitHub release with the archives, the packages and SHA256SUMS (a pre-release for `-…`).
+#   - a GitHub release with the archives, the packages and SHA256SUMS (a pre-release for `-…`);
+#   - signed SLSA build provenance (Sigstore) for every release file and for the image, checked
+#     with `gh attestation verify`; the image's is also pushed to Docker Hub.
 #
 # Repository secrets: DOCKERHUB_USERNAME and DOCKERHUB_TOKEN (a Docker Hub access token with
 # read/write rights on sardylan/meshcom-status).
@@ -332,6 +334,10 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/')
     needs: [image, linux, native]
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -359,12 +365,23 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Multi-architecture tags
+        id: index
         working-directory: digests
         run: |
           docker buildx imagetools create \
             $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
             $(printf "$IMAGE@sha256:%s " *)
           docker buildx imagetools inspect "$IMAGE:${{ steps.meta.outputs.version }}"
+          digest="$(docker buildx imagetools inspect "$IMAGE:${{ steps.meta.outputs.version }}" --format '{{json .Manifest}}' | jq -r .digest)"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+
+      - name: Provenance
+        uses: actions/attest@v4
+        with:
+          subject-name: docker.io/${{ env.IMAGE }}
+          subject-digest: ${{ steps.index.outputs.digest }}
+          push-to-registry: true
+          create-storage-record: false
 
   release:
     name: GitHub release
@@ -373,6 +390,8 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: write
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@v5
 
@@ -387,6 +406,11 @@ jobs:
         run: |
           sha256sum * > SHA256SUMS
           cat SHA256SUMS
+
+      - name: Provenance
+        uses: actions/attest@v4
+        with:
+          subject-checksums: dist/SHA256SUMS
 
       - name: Publish
         env:

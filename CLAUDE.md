@@ -76,6 +76,7 @@ in [`README.md`](README.md).
 | `src/web/assets.rs`, `encoding.rs` | front end embedded as Brotli; identity/br/zstd/gzip forms computed on first request, kept in RAM; `Accept-Encoding` negotiation — pure |
 | `docker/`              | `Dockerfile` (`base` / `dev` / `build` / `artifact` / `prod`; pins Rust and Node.js), `Dockerfile.dockerignore`, `compose.yml` (`postgres` 17 + `server`), `env.example`; `.env` and `volumes/` local only |
 | `.github/workflows/ci.yml` | GitHub Actions: tests on merge requests and `develop`/`main`; on `v*` tags, native builds of 5 archives, 2 `.deb`, a 2-architecture image, then publication |
+| `.github/dependabot.yml` | weekly update merge requests: Cargo, npm (`web/`), GitHub Actions; minor/patch grouped. Rust/Node.js pins stay manual |
 | `packaging/`           | `meshcom-status.toml` (default config, = `--config-dump`, checked by a test); `deb/`: `build.sh` (dpkg-deb), systemd unit, maintainer scripts, lintian overrides |
 | `build.rs`             | builds `web/` with npm into `$OUT_DIR/web` (embedded by `src/web/assets.rs`) |
 | `web/src/lib/`         | front end: config, API types, WebSocket context (`live.tsx`), settings, geometry, GeoJSON — tested with vitest |
