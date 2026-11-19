@@ -11,6 +11,7 @@ mod import;
 mod kiss;
 mod logging;
 mod node_http;
+mod retry;
 mod stats;
 mod store;
 mod view;

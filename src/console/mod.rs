@@ -1,6 +1,6 @@
 mod parse;
 
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::net::TcpStream;
@@ -8,9 +8,8 @@ use tokio::sync::mpsc;
 
 use crate::errors::{Error, Result};
 use crate::frame::Observation;
+use crate::retry;
 
-const RETRY_MIN: Duration = Duration::from_secs(2);
-const RETRY_MAX: Duration = Duration::from_secs(60);
 const IDLE_TIMEOUT: Duration = Duration::from_secs(120);
 
 async fn read_console(address: &str, out: &mpsc::Sender<Observation>) -> Result<()> {
@@ -61,18 +60,18 @@ async fn read_console(address: &str, out: &mpsc::Sender<Observation>) -> Result<
 
 pub(crate) async fn run(host: String, port: u16, out: mpsc::Sender<Observation>) {
     let address = format!("{host}:{port}");
-    let mut delay = RETRY_MIN;
+    let mut delay = retry::MIN;
     while !out.is_closed() {
-        match read_console(&address, &out).await {
-            Ok(()) => {
-                tracing::warn!("net console at {address} closed the connection");
-                delay = RETRY_MIN;
-            }
-            Err(e) => {
-                tracing::warn!("net console: {e}; retrying in {} s", delay.as_secs());
-            }
+        let started = Instant::now();
+        let result = read_console(&address, &out).await;
+        delay = retry::next(delay, started.elapsed());
+        match result {
+            Ok(()) => tracing::warn!(
+                "net console at {address} closed the connection; retrying in {} s",
+                delay.as_secs()
+            ),
+            Err(e) => tracing::warn!("net console: {e}; retrying in {} s", delay.as_secs()),
         }
         tokio::time::sleep(delay).await;
-        delay = (delay * 2).min(RETRY_MAX);
     }
 }

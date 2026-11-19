@@ -64,6 +64,7 @@ in [`README.md`](README.md).
 | `src/console/`         | source: net console `RX_FRAME` lines and the raw MeshCom frame       |
 | `src/kiss/`            | source: KISS deframer, AX.25, RxMeta/SrcInfo assembly                |
 | `src/node_http/`       | source: own callsign/position from `/getparam/` (raw HTTP client)    |
+| `src/retry.rs`         | reconnect delay of the sources: doubles up to 60 s, resets after a connection lasting 60 s — pure |
 | `src/graph.rs`         | `Nodes` registry (global) and `window()`: links/routes of N receptions — pure |
 | `src/chat.rs`          | chat targets (broadcast / channel / callsign), copy grouping — pure  |
 | `src/stats.rs`         | network statistics: ranges, shapes, histograms — pure (counting is SQL in `store/`) |
