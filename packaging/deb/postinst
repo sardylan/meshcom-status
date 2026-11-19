@@ -1,0 +1,36 @@
+#!/bin/sh
+set -e
+
+NAME=meshcom-status
+CONF=/etc/meshcom-status/meshcom-status.toml
+
+if [ "$1" = "configure" ]; then
+    if ! getent passwd "$NAME" >/dev/null; then
+        adduser --system --group --no-create-home --home /nonexistent --shell /usr/sbin/nologin \
+            --quiet "$NAME"
+    fi
+    if ! dpkg-statoverride --list "$CONF" >/dev/null 2>&1; then
+        chown root:"$NAME" "$CONF"
+        chmod 0640 "$CONF"
+    fi
+fi
+
+if [ "$1" = "configure" ] || [ "$1" = "abort-upgrade" ] || [ "$1" = "abort-deconfigure" ] || [ "$1" = "abort-remove" ]; then
+    deb-systemd-helper unmask "$NAME.service" >/dev/null || true
+    if deb-systemd-helper --quiet was-enabled "$NAME.service"; then
+        deb-systemd-helper enable "$NAME.service" >/dev/null || true
+    else
+        deb-systemd-helper update-state "$NAME.service" >/dev/null || true
+    fi
+    if [ -z "${DPKG_ROOT:-}" ] && [ -d /run/systemd/system ]; then
+        systemctl --system daemon-reload >/dev/null || true
+        if [ -n "$2" ]; then
+            action=restart
+        else
+            action=start
+        fi
+        deb-systemd-invoke "$action" "$NAME.service" >/dev/null || true
+    fi
+fi
+
+exit 0

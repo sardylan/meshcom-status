@@ -1,0 +1,16 @@
+target/
+web/node_modules/
+web/dist/
+
+.git/
+.gitignore
+.claude/
+.idea/
+.vscode/
+*.swp
+
+*.toml.local
+**/.env
+meshcom-status.toml
+
+docker/

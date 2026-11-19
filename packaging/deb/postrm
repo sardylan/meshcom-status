@@ -1,0 +1,36 @@
+#!/bin/sh
+set -e
+
+NAME=meshcom-status
+
+if [ "$1" = "remove" ] && [ -d /run/systemd/system ]; then
+    systemctl --system daemon-reload >/dev/null || true
+fi
+
+if [ "$1" = "remove" ] && command -v deb-systemd-helper >/dev/null; then
+    deb-systemd-helper mask "$NAME.service" >/dev/null || true
+fi
+
+if [ "$1" = "purge" ]; then
+    if command -v deb-systemd-helper >/dev/null; then
+        deb-systemd-helper purge "$NAME.service" >/dev/null || true
+        deb-systemd-helper unmask "$NAME.service" >/dev/null || true
+    fi
+    if getent passwd "$NAME" >/dev/null; then
+        if command -v deluser >/dev/null; then
+            deluser --system --quiet "$NAME" || true
+        else
+            userdel "$NAME" || true
+        fi
+    fi
+    if getent group "$NAME" >/dev/null; then
+        if command -v delgroup >/dev/null; then
+            delgroup --system --only-if-empty --quiet "$NAME" || true
+        else
+            groupdel "$NAME" || true
+        fi
+    fi
+    rmdir /etc/meshcom-status 2>/dev/null || true
+fi
+
+exit 0

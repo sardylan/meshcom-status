@@ -1,0 +1,6 @@
+# The configuration may hold the database password: postinst gives it to root:meshcom-status 0640.
+meshcom-status: non-standard-file-perm 0640 != 0644 [etc/meshcom-status/meshcom-status.toml]
+# Built by the project's release pipeline, not uploaded to Debian: there is no ITP bug to close.
+meshcom-status: initial-upload-closes-no-bugs [usr/share/doc/meshcom-status/changelog.Debian.gz:1]
+# `meshcom-status --help` documents every option, with its environment variable and default.
+meshcom-status: no-manual-page [usr/bin/meshcom-status]

@@ -1,0 +1,396 @@
+# CI/CD (see doc/guidelines/cicd.md).
+#
+# - Pull requests to develop or main, and pushes to develop or main: tests (front-end lint and
+#   tests, rustfmt, clippy, Rust tests) and a check that the container image builds. Nothing is
+#   published.
+# - Tag `vMAJOR.MINOR.PATCH[-PRERELEASE]` (Semantic Versioning, equal to the version of
+#   Cargo.toml and web/package.json): the tests again, then the release build on a native runner
+#   per platform, and the publication:
+#   - archives (binary, meshcom-status.toml, README.md, LICENSE.md): linux-amd64, linux-arm64,
+#     macos-arm64 (.tar.gz), windows-x64, windows-arm64 (.zip);
+#   - Debian packages: amd64, arm64;
+#   - the image sardylan/meshcom-status for linux/amd64 and linux/arm64 (`X.Y.Z`; for stable
+#     versions also `X.Y`, `X` from 1.0.0 on, and `latest`);
+#   - a GitHub release with the archives, the packages and SHA256SUMS (a pre-release for `-…`).
+#
+# Repository secrets: DOCKERHUB_USERNAME and DOCKERHUB_TOKEN (a Docker Hub access token with
+# read/write rights on sardylan/meshcom-status).
+
+name: CI/CD
+
+on:
+  pull_request:
+    branches: [develop, main]
+  push:
+    branches: [develop, main]
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+env:
+  RUST_VERSION: "1.100.0"
+  IMAGE: sardylan/meshcom-status
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Node.js (web/.nvmrc)
+        uses: actions/setup-node@v5
+        with:
+          node-version-file: web/.nvmrc
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Rust ${{ env.RUST_VERSION }}
+        run: |
+          rustup toolchain install "$RUST_VERSION" --profile minimal --component clippy,rustfmt
+          echo "RUSTUP_TOOLCHAIN=$RUST_VERSION" >> "$GITHUB_ENV"
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Front end
+        working-directory: web
+        run: |
+          npm ci --no-audit --no-fund
+          npm run lint
+          npm test
+
+      - name: Format
+        run: cargo fmt --check
+
+      - name: Clippy
+        run: cargo clippy --all-targets --locked -- -D warnings
+
+      - name: Tests
+        run: cargo test --locked
+
+      - name: Debian packaging scripts
+        run: sh -n packaging/deb/postinst packaging/deb/prerm packaging/deb/postrm packaging/deb/build.sh
+
+  image-check:
+    name: Image builds
+    if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+    needs: test
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build, not published
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          target: prod
+          platforms: linux/amd64
+          push: false
+          cache-from: type=gha,scope=linux-amd64
+          cache-to: type=gha,scope=linux-amd64,mode=max
+
+  version:
+    name: Version
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+      prerelease: ${{ steps.check.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Tag is a semantic version equal to the code's
+        id: check
+        run: |
+          tag="$GITHUB_REF_NAME"
+          semver='^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-((0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(\.(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*))?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$'
+          if ! printf '%s' "$tag" | grep -Eq "$semver"; then
+            echo "::error::tag $tag is not vMAJOR.MINOR.PATCH[-PRERELEASE][+BUILD] (https://semver.org)"
+            exit 1
+          fi
+          version="${tag#v}"
+          cargo_version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)"
+          web_version="$(jq -r .version web/package.json)"
+          for found in "Cargo.toml:$cargo_version" "web/package.json:$web_version"; do
+            if [ "${found#*:}" != "$version" ]; then
+              echo "::error::tag $tag does not match ${found%%:*} (${found#*:})"
+              exit 1
+            fi
+          done
+          case "$version" in *-*) prerelease=true ;; *) prerelease=false ;; esac
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+
+  linux:
+    name: Linux ${{ matrix.arch }}
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [test, version]
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Binary
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          target: artifact
+          platforms: linux/${{ matrix.arch }}
+          outputs: type=local,dest=out
+          cache-from: type=gha,scope=linux-${{ matrix.arch }}
+
+      - name: Smoke test
+        run: out/meshcom-status --version
+
+      - name: Archive
+        run: |
+          name="meshcom-status-v${VERSION}-linux-${{ matrix.arch }}"
+          mkdir -p "dist/$name"
+          cp out/meshcom-status packaging/meshcom-status.toml README.md LICENSE.md "dist/$name/"
+          tar -C dist -czf "dist/$name.tar.gz" "$name"
+          rm -r "dist/$name"
+
+      - name: Debian package
+        run: packaging/deb/build.sh out/meshcom-status "${{ matrix.arch }}" "$VERSION" dist
+
+      - name: Lintian
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq lintian >/dev/null
+          lintian --fail-on error,warning dist/*.deb
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-linux-${{ matrix.arch }}
+          path: dist/*
+          if-no-files-found: error
+
+  native:
+    name: ${{ matrix.platform }}
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [test, version]
+    strategy:
+      matrix:
+        include:
+          - platform: macos-arm64
+            runner: macos-15
+            exe: ""
+          - platform: windows-x64
+            runner: windows-2025
+            exe: .exe
+          - platform: windows-arm64
+            runner: windows-11-arm
+            exe: .exe
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        shell: bash
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Node.js (web/.nvmrc)
+        uses: actions/setup-node@v5
+        with:
+          node-version-file: web/.nvmrc
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Rust ${{ env.RUST_VERSION }}
+        run: |
+          if ! command -v rustup >/dev/null; then
+            case "$RUNNER_OS-$RUNNER_ARCH" in
+              Windows-ARM64) init=https://static.rust-lang.org/rustup/dist/aarch64-pc-windows-msvc/rustup-init.exe ;;
+              Windows-X64) init=https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe ;;
+              *) init= ;;
+            esac
+            if [ -n "$init" ]; then
+              curl --proto '=https' --tlsv1.2 -sSfL -o rustup-init.exe "$init"
+              ./rustup-init.exe -y --profile minimal --default-toolchain none
+              rm rustup-init.exe
+              echo "$USERPROFILE/.cargo/bin" >> "$GITHUB_PATH"
+              export PATH="$USERPROFILE/.cargo/bin:$PATH"
+            else
+              curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain none
+              echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+              export PATH="$HOME/.cargo/bin:$PATH"
+            fi
+          fi
+          rustup toolchain install "$RUST_VERSION" --profile minimal
+          echo "RUSTUP_TOOLCHAIN=$RUST_VERSION" >> "$GITHUB_ENV"
+
+      - name: Tests
+        run: cargo test --locked
+
+      - name: Binary
+        run: |
+          RUSTFLAGS="--remap-path-prefix=$GITHUB_WORKSPACE=. --remap-path-prefix=$(dirname "$(dirname "$(command -v cargo)")")=~/.cargo" \
+            cargo build --release --locked
+          target/release/meshcom-status${{ matrix.exe }} --version
+
+      - name: Archive
+        run: |
+          name="meshcom-status-v${VERSION}-${{ matrix.platform }}"
+          mkdir -p "dist/$name"
+          cp "target/release/meshcom-status${{ matrix.exe }}" packaging/meshcom-status.toml README.md LICENSE.md "dist/$name/"
+          cd dist
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            7z a -tzip -bso0 "$name.zip" "$name"
+          else
+            tar -czf "$name.tar.gz" "$name"
+          fi
+          rm -r "$name"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.platform }}
+          path: dist/*
+          if-no-files-found: error
+
+  image:
+    name: Image ${{ matrix.arch }}
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [test, version]
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Labels
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          labels: |
+            org.opencontainers.image.licenses=GPL-3.0-or-later
+
+      - name: Docker Hub login
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          target: prod
+          platforms: linux/${{ matrix.arch }}
+          labels: ${{ steps.meta.outputs.labels }}
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=linux-${{ matrix.arch }}
+          cache-to: type=gha,scope=linux-${{ matrix.arch }},mode=max
+
+      - name: Digest
+        run: |
+          mkdir -p digests
+          digest="${{ steps.build.outputs.digest }}"
+          touch "digests/${digest#sha256:}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: digest-${{ matrix.arch }}
+          path: digests/*
+          if-no-files-found: error
+
+  image-publish:
+    name: Publish image
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [image, linux, native]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: digest-*
+          path: digests
+          merge-multiple: true
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Image tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          flavor: latest=auto
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}},enable=${{ !startsWith(github.ref, 'refs/tags/v0.') }}
+
+      - name: Docker Hub login
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Multi-architecture tags
+        working-directory: digests
+        run: |
+          docker buildx imagetools create \
+            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf "$IMAGE@sha256:%s " *)
+          docker buildx imagetools inspect "$IMAGE:${{ steps.meta.outputs.version }}"
+
+  release:
+    name: GitHub release
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [version, linux, native, image-publish]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: dist
+          merge-multiple: true
+
+      - name: Checksums
+        working-directory: dist
+        run: |
+          sha256sum * > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRERELEASE: ${{ needs.version.outputs.prerelease }}
+        run: |
+          flags=()
+          if [ "$PRERELEASE" = "true" ]; then flags+=(--prerelease); else flags+=(--latest); fi
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --title "$GITHUB_REF_NAME" --generate-notes --verify-tag "${flags[@]}"

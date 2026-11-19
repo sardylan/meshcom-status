@@ -1,0 +1,46 @@
+# meshcom-status configuration file.
+# Written by --config-save / --config-dump: comments and layout are not kept on rewrite.
+
+[log]
+# Log level
+level = "info"
+
+[web]
+# Address and port the web server listens on
+listen_address = "0.0.0.0:8080"
+# Path prefix of every API endpoint
+api_prefix = "/api"
+# Base maps the page offers
+[[web.base_maps]]
+name = "OpenStreetMap"
+url = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+attribution = "© OpenStreetMap contributors"
+max_zoom = 19
+[[web.base_maps]]
+name = "OpenTopoMap"
+url = "https://tile.opentopomap.org/{z}/{x}/{y}.png"
+attribution = "Map data © OpenStreetMap contributors, SRTM · Style © OpenTopoMap (CC-BY-SA)"
+max_zoom = 17
+[[web.base_maps]]
+name = "Esri World Imagery"
+url = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+attribution = "Tiles © Esri — Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community"
+max_zoom = 19
+
+[node]
+# Host name or IP address of the MeshCom node
+# host = ""
+# HTTP port of the node
+http_port = 80
+# Read frames from the node's net console
+console_enabled = true
+# TCP port of the node's net console
+console_port = 2323
+# Read frames from the node's KISS port
+kiss_enabled = false
+# TCP port of the node's KISS interface
+kiss_port = 8001
+
+[database]
+# PostgreSQL connection URL
+url = "postgres://meshcom:meshcom@localhost:5432/meshcom"
