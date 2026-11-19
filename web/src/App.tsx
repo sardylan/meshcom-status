@@ -60,7 +60,14 @@ function Shell() {
         <ChatView visible={view === 'chat'} />
         <StatsView visible={view === 'stats'} />
       </main>
-      <footer className="app-footer">meshcom-status {CONFIG.version ? `v${CONFIG.version}` : 'unknown version'}</footer>
+      <footer className="app-footer">
+        <span>meshcom-status {CONFIG.version ? `v${CONFIG.version}` : 'unknown version'}</span>
+        {CONFIG.repository && (
+          <a href={CONFIG.repository} target="_blank" rel="noopener noreferrer">
+            GitHub
+          </a>
+        )}
+      </footer>
     </div>
   );
 }

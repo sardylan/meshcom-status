@@ -8,6 +8,7 @@ export interface BaseMap {
 export interface PageConfig {
   apiPrefix: string;
   version: string;
+  repository: string;
   limits: number[];
   defaultLimit: number;
   baseMaps: BaseMap[];
@@ -22,6 +23,7 @@ declare global {
 export const DEFAULT_CONFIG: PageConfig = {
   apiPrefix: '/api',
   version: '',
+  repository: '',
   limits: [10, 30, 100, 500, 1000],
   defaultLimit: 30,
   baseMaps: [

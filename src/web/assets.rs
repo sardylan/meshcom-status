@@ -160,6 +160,7 @@ struct PageConfig<'a> {
     limits: &'a [u32],
     default_limit: u32,
     version: &'a str,
+    repository: &'a str,
     base_maps: Vec<BaseMapView<'a>>,
 }
 
@@ -178,6 +179,7 @@ pub(crate) fn render_index(template: &str, web: &WebConfig) -> Result<String> {
         limits: &view::LIMITS,
         default_limit: view::DEFAULT_LIMIT,
         version: env!("CARGO_PKG_VERSION"),
+        repository: env!("CARGO_PKG_REPOSITORY"),
         base_maps: web.base_maps.iter().map(base_map_view).collect(),
     };
     let json = serde_json::to_string(&config)?.replace("</", "<\\/");
@@ -222,6 +224,9 @@ mod tests {
         );
         let version = format!("\"version\":\"{}\"", env!("CARGO_PKG_VERSION"));
         assert!(html.contains(&version), "{html}");
+        let repository = format!("\"repository\":\"{}\"", env!("CARGO_PKG_REPOSITORY"));
+        assert!(html.contains(&repository), "{html}");
+        assert!(env!("CARGO_PKG_REPOSITORY").starts_with("https://"));
         assert!(
             html.contains("\"baseMaps\":[{\"name\":\"Topo\",\"url\":\"https://t/{z}/{x}/{y}.png\""),
             "{html}"

@@ -3,6 +3,7 @@ name = "meshcom-status"
 version = "1.0.1"
 edition = "2024"
 license = "GPL-3.0-or-later"
+repository = "https://github.com/sardylan/meshcom-status"
 
 [dependencies]
 axum = { version = "0.8.9", features = ["ws"] }

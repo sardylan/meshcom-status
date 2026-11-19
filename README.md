@@ -1,14 +1,37 @@
 # meshcom-status
 
+[![CI/CD](https://github.com/sardylan/meshcom-status/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/sardylan/meshcom-status/actions/workflows/ci.yml?query=branch%3Amain)
+[![Release](https://img.shields.io/github/v/release/sardylan/meshcom-status?sort=semver)](https://github.com/sardylan/meshcom-status/releases/latest)
+[![Docker image](https://img.shields.io/docker/v/sardylan/meshcom-status?sort=semver&label=docker)](https://hub.docker.com/r/sardylan/meshcom-status)
+
 Status server for a [MeshCom](https://icssw.org/meshcom/) network. It connects to one MeshCom
 node, reads every frame the node receives, stores it in PostgreSQL, and shows on a live map
 **which nodes hear which**:
 nodes with their callsign, and geodesic lines with an arrow from the transmitter to the receiver.
 A live **Traffic** list shows every received frame: text messages, position beacons, HEY beacons
-and anything else. A **Chat** view shows the text messages as conversations.
+and anything else. A **Chat** view shows the text messages as conversations, and a **Stats** view
+charts the network's activity.
 
-The page has two views, switched from the top bar: **Map** and **Chat**. The top bar also shows
-the WebSocket state; the footer, shared by both views, shows the server version.
+The page has three views, switched from the top bar: **Map**, **Chat** and **Stats**. The top bar
+also shows the node's callsign and the WebSocket state; the footer, shared by every view, shows the
+server version and a link to this repository.
+
+## Screenshots
+
+The screenshots show demo data: real traffic patterns, with fictitious callsigns, messages and
+station positions.
+
+**Map**: who hears whom, with the live traffic list.
+
+![Map view](doc/img/map.png)
+
+**Chat**: one tab per conversation, every copy of a message with its path and signal.
+
+![Chat view](doc/img/chat.png)
+
+**Stats**: activity over time, frame types, relays, signal, busiest stations.
+
+![Stats view](doc/img/stats.png)
 
 ## Quick start
 
