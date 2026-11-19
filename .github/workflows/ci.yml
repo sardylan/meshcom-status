@@ -90,7 +90,7 @@ jobs:
       - uses: docker/setup-buildx-action@v3
 
       - name: Build, not published
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: docker/Dockerfile
@@ -153,7 +153,7 @@ jobs:
       - uses: docker/setup-buildx-action@v3
 
       - name: Binary
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: docker/Dockerfile
@@ -306,7 +306,7 @@ jobs:
 
       - name: Build and push by digest
         id: build
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: docker/Dockerfile
